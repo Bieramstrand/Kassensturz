@@ -3,12 +3,15 @@
 // Optional: SCAN_CODE als einfacher Zugriffsschutz, PERPLEXITY_MODEL zum Ändern des Modells.
 
 const PROMPTS = {
-  fix: 'Du liest das Foto einer Rechnung, eines Vertrags, einer Abbuchung oder einer Versicherungsunterlage. ' +
-    'Gib NUR ein JSON Objekt ohne weiteren Text zurück: ' +
-    '{"name": kurzer Name des Postens (zum Beispiel Strom, Handyvertrag, Haftpflicht), ' +
-    '"amount": Betrag pro Zahlung als Zahl in Euro mit Punkt als Dezimaltrenner, ' +
-    '"every": 1 für monatlich, 3 für vierteljährlich, 12 für jährlich, ' +
-    '"from": Monat des Beginns oder der Gültigkeit im Format JJJJ-MM oder null}. ' +
+  fix: 'Du liest das Foto einer Rechnung, eines Vertrags, einer Abbuchung oder einer Tabelle mit monatlichen Ausgaben. ' +
+    'Gib NUR ein JSON Objekt ohne weiteren Text zurück: {"items": [ {"name": ..., "amount": ..., "every": ..., "from": ...} ]}. ' +
+    'Jede einzelne Ausgabenposition mit einem Betrag wird ein eigener Eintrag in items. ' +
+    'name: kurzer Name der Position (zum Beispiel Strom, Handyvertrag, Haftpflicht). ' +
+    'amount: Betrag pro Zahlung als Zahl in Euro mit Punkt als Dezimaltrenner. ' +
+    'every: 1 für monatlich, 3 für vierteljährlich, 12 für jährlich. Bei einer Tabelle mit monatlichen Beträgen ist every immer 1. ' +
+    'from: Monat des Beginns oder der Gültigkeit im Format JJJJ-MM oder null. ' +
+    'Lass Summenzeilen, Einkünfte, Einnahmen, Überschriften und Zeilen ohne Betrag weg. ' +
+    'Bei einer einzelnen Rechnung oder einem einzelnen Vertrag gibt es genau einen Eintrag. ' +
     'Wenn du einen Wert nicht sicher erkennst, setze null.',
   sal: 'Du liest das Foto einer Gehaltsabrechnung. ' +
     'Gib NUR ein JSON Objekt ohne weiteren Text zurück: ' +
