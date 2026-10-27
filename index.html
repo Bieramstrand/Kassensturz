@@ -129,6 +129,7 @@ details summary{cursor:pointer;margin:6px 0}
 .ck{display:flex;align-items:center;gap:7px;margin:0;color:var(--ink);font-size:14px;cursor:pointer}
 .ck input{width:22px;height:22px;padding:0;accent-color:var(--accent);flex:none}
 .gift.done .gh .m b{text-decoration:line-through;color:var(--mute)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:14px;font-size:14px;z-index:40;max-width:90%;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.35)}
 </style>
 </head>
 <body>
@@ -179,7 +180,7 @@ details summary{cursor:pointer;margin:6px 0}
           <select id="cat"></select></div>
         <div><label for="note">Notiz</label><input id="note" type="text" placeholder="z. B. Rewe"></div>
       </div>
-      <div style="margin-top:14px"><button class="btn" id="addTx" style="width:100%">Buchung speichern</button></div>
+      <div class="row" style="margin-top:14px"><button class="btn ghost" data-scan="bon">Kassenbon scannen</button><button class="btn" id="addTx">Buchung speichern</button></div>
     </div>
 
     <div class="card">
@@ -318,6 +319,9 @@ details summary{cursor:pointer;margin:6px 0}
     </div>
   </div>
 </div>
+
+<input type="file" id="scanInput" accept="image/*" class="hide">
+<div class="toast hide" id="scanMsg"></div>
 
 <div class="sheet" id="fsheet">
   <div class="box">
@@ -629,7 +633,7 @@ window.TAGWERK_FIREBASE={
       }).join("")+'</div>';
       h+='<div class="acts"><button class="btn ghost small" data-act="chgFix" data-id="'+it.id+'">Preis ändern</button><button class="btn danger small" data-act="delFix" data-id="'+it.id+'">Löschen</button></div></div>';
     });
-    h+='<div style="margin-top:12px"><button class="btn" data-act="addFix" style="width:100%">Fixkosten hinzufügen</button></div>';
+    h+='<div class="row" style="margin-top:12px"><button class="btn" data-act="addFix">Fixkosten hinzufügen</button><button class="btn ghost" data-scan="fix">Foto scannen</button></div>';
     h+='<div class="note">Tipp: Mit einem früheren Monat bei „Gültig ab“ kannst du auch alte Preise eintragen, damit die Entwicklung über die Jahre sichtbar wird.</div></div>';
     if(state.fix.length){
       var tot=ys.map(function(y){return state.fix.reduce(function(s,it){return s+fixYear(it,y);},0);});
@@ -655,7 +659,7 @@ window.TAGWERK_FIREBASE={
       var i=sorted.indexOf(e),p=i>0?pct(e.net,sorted[i-1].net):"";
       h+='<div class="tx"><div class="m"><b>ab '+ymLabel(e.from)+'</b><small>'+(e.gross?'Brutto '+eur(e.gross):'')+(e.gross&&e.bonus?' · ':'')+(e.bonus?'Sonderzahlung '+eur(e.bonus)+' pro Jahr':'')+(!e.gross&&!e.bonus?'Netto pro Monat':'')+(p?' · '+p:'')+'</small></div><div class="a">'+eur(e.net)+'</div><button class="x" data-act="delSal" data-id="'+e.id+'" aria-label="Löschen">×</button></div>';
     });
-    h+='</div><div style="margin-top:12px"><button class="btn" data-act="addSal" style="width:100%">Gehalt oder Erhöhung eintragen</button></div></div>';
+    h+='</div><div style="margin-top:12px"><div class="row"><button class="btn" data-act="addSal">Gehalt oder Erhöhung eintragen</button><button class="btn ghost" data-scan="sal">Foto scannen</button></div></div></div>';
     if(state.sal.length){
       var tot=ys.map(function(y){return salYear(y);});
       h+='<div class="card"><h2>Gehalt pro Jahr</h2>'+bars(ys.map(function(y,i){return {label:y,val:tot[i],note:i>0?pct(tot[i],tot[i-1]):""};}))+
@@ -988,6 +992,82 @@ window.TAGWERK_FIREBASE={
       await connect(async function(){return db.doc("shared/xmas");},"Live geteilt: Alle mit Zugriff auf diese Seite sehen und bearbeiten denselben Weihnachtskalender.");
     }catch(e){}
   })();
+
+  /* Foto Erkennung (Netlify Function mit Perplexity) */
+  var SCANKEY="tagwerk_scancode",toastT=null;
+  function toast(t,keep){
+    var el=$("scanMsg");el.textContent=t;el.classList.remove("hide");
+    clearTimeout(toastT);
+    if(!keep)toastT=setTimeout(function(){el.classList.add("hide");},4500);
+  }
+  function shrink(file,max){
+    return new Promise(function(res,rej){
+      var img=new Image(),url=URL.createObjectURL(file);
+      img.onload=function(){
+        var r=Math.min(1,max/Math.max(img.width,img.height));
+        var c=document.createElement("canvas");
+        c.width=Math.round(img.width*r);c.height=Math.round(img.height*r);
+        c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+        URL.revokeObjectURL(url);
+        res(c.toDataURL("image/jpeg",0.85));
+      };
+      img.onerror=function(){rej(new Error("Das Bild konnte nicht gelesen werden."));};
+      img.src=url;
+    });
+  }
+  async function scanCall(mode,image,retry){
+    var code="";try{code=localStorage.getItem(SCANKEY)||"";}catch(e){}
+    var res;
+    try{
+      res=await fetch("/.netlify/functions/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:mode,image:image,code:code})});
+    }catch(e){throw new Error("Keine Verbindung. Die Foto Erkennung gibt es nur in der Netlify Version.");}
+    var j=await res.json().catch(function(){return {};});
+    if(res.status===404)throw new Error("Die Foto Erkennung ist auf dieser Seite nicht eingerichtet.");
+    if(res.status===401&&!retry){
+      var c=prompt("Bitte den Scan Code eingeben:");
+      if(c){try{localStorage.setItem(SCANKEY,c);}catch(e){}return scanCall(mode,image,true);}
+    }
+    if(!res.ok)throw new Error(j.error||"Das Foto konnte nicht gelesen werden.");
+    return j.data||{};
+  }
+  function setV(id,v){var el=$(id);if(el&&v!=null&&v!=="")el.value=v;}
+  function okNum(v){var n=typeof v==="number"?v:parseFloat(String(v).replace(",","."));return isNaN(n)?null:Math.round(n*100)/100;}
+  function applyScan(mode,d){
+    if(mode==="fix"){
+      document.querySelector('[data-act="addFix"]').click();
+      setV("ff_name",d.name);setV("ff_amount",okNum(d.amount));
+      if(d.every===1||d.every===3||d.every===12)$("ff_every").value=String(d.every);
+      if(/^\d{4}-\d{2}$/.test(d.from||""))$("ff_from").value=d.from;
+    }else if(mode==="sal"){
+      document.querySelector('[data-act="addSal"]').click();
+      setV("ff_net",okNum(d.net));setV("ff_gross",okNum(d.gross));setV("ff_bonus",okNum(d.bonus));
+      if(/^\d{4}-\d{2}$/.test(d.from||""))$("ff_from").value=d.from;
+    }else if(mode==="bon"){
+      document.querySelector('#bSeg [data-b="alltag"]').click();
+      document.querySelector('#typeSeg [data-t="out"]').click();
+      setV("amt",okNum(d.total));
+      if(/^\d{4}-\d{2}-\d{2}$/.test(d.date||""))$("date").value=d.date;
+      setV("note",d.merchant);
+      if(d.category&&CATS.indexOf(d.category)>-1&&d.category!=="Gehalt")$("cat").value=d.category;
+      $("amt").scrollIntoView({behavior:"smooth",block:"center"});
+    }
+    toast("Gelesen. Bitte die Werte kurz prüfen und speichern.");
+  }
+  $("p_budget").addEventListener("click",function(e){
+    var t=e.target.closest("[data-scan]");if(!t)return;
+    var mode=t.getAttribute("data-scan"),inp=$("scanInput");
+    inp.onchange=async function(){
+      var f=inp.files[0];inp.value="";
+      if(!f)return;
+      try{
+        toast("Foto wird gelesen …",true);
+        var img=await shrink(f,1600);
+        var d=await scanCall(mode,img,false);
+        applyScan(mode,d);
+      }catch(err){toast(err.message||"Das hat nicht geklappt.");}
+    };
+    inp.click();
+  });
 
   /* Datensicherung als Datei */
   var BK="tagwerk_lastbackup";
