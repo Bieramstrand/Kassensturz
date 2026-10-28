@@ -138,6 +138,20 @@ details summary{cursor:pointer;margin:6px 0}
 .lr{display:grid;grid-template-columns:24px 1fr 96px;gap:8px;align-items:center;margin:6px 0}
 .lr input[type=checkbox]{width:22px;height:22px;padding:0;accent-color:var(--accent)}
 .lr input[type=text],.lr input[type=number]{padding:9px 10px}
+.tl{border-bottom:1px solid var(--line);padding:9px 0}
+.tl1{display:grid;grid-template-columns:24px 1fr 92px;gap:8px;align-items:center}
+.tl2,.tl3{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;align-items:center}
+.tl input[type=checkbox]{width:22px;height:22px;padding:0;accent-color:var(--accent)}
+.tl input[type=text],.tl input[type=number],.tl input[type=date],.tl select{padding:9px 10px}
+.tl3 .ck input{width:22px;height:22px}
+.balrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.balrow h2{margin-bottom:6px}
+.avg{text-align:right;flex:none}
+.avg small{display:block;color:var(--mute);font-size:12px;line-height:1.25}
+.avg b{display:block;font-size:20px;margin:2px 0}
+input[type=date],input[type=month]{-webkit-appearance:none;appearance:none;display:block;width:100%;min-width:0;max-width:100%;text-align:left;min-height:46px;line-height:1.2}
+input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-and-time-value{text-align:left;min-height:1.2em}
+.row>*{min-width:0}
 </style>
 </head>
 <body>
@@ -158,10 +172,12 @@ details summary{cursor:pointer;margin:6px 0}
     </div>
     <div id="bp_alltag">
     <div class="card">
-      <h2>Kontostand</h2>
-      <div class="big" id="balance">0,00 €</div>
+      <div class="balrow">
+        <div><h2>Kontostand</h2><div class="big" id="balance">0,00 €</div></div>
+        <div class="avg"><small>Ø Ausgaben pro Monat</small><b id="avgM">0,00 €</b><small id="avgN"></small></div>
+      </div>
       <div class="row" style="margin-top:12px">
-        <div class="stat"><small>Ausgegeben diesen Monat</small><b id="spent">0,00 €</b></div>
+        <div class="stat"><small>Ausgegeben im Budgetmonat</small><b id="spent">0,00 €</b></div>
         <div class="stat"><small>Noch verfügbar</small><b id="left">0,00 €</b></div>
       </div>
       <div class="bar"><i id="barfill" style="width:0"></i></div>
@@ -194,7 +210,9 @@ details summary{cursor:pointer;margin:6px 0}
           <div class="note" id="hhNote"></div>
         </div>
       </div>
-      <div class="row" style="margin-top:14px"><button class="btn ghost" data-scan="bon">Kassenbon scannen</button><button class="btn" id="addTx">Buchung speichern</button></div>
+      <div class="row" style="margin-top:14px"><button class="btn ghost" data-scan="bon">Kassenbon als Summe</button><button class="btn ghost" data-scan="bonlist">Kassenbon in Positionen</button></div>
+      <div style="margin-top:8px"><button class="btn ghost" data-scan="stmt" style="width:100%">Kontoauszug scannen</button></div>
+      <div style="margin-top:8px"><button class="btn" id="addTx" style="width:100%">Buchung speichern</button></div>
     </div>
 
     <div class="card">
@@ -202,9 +220,10 @@ details summary{cursor:pointer;margin:6px 0}
       <div class="row">
         <div><label for="setBal">Kontostand heute in Euro</label><input id="setBal" type="number" inputmode="decimal" step="0.01" placeholder="0,00"></div>
         <div><label for="setBud">Monatsbudget in Euro</label><input id="setBud" type="number" inputmode="decimal" step="0.01" placeholder="0,00"></div>
+        <div><label for="setCyc">Budgetmonat beginnt am Tag</label><input id="setCyc" type="number" inputmode="numeric" min="1" max="28" placeholder="25"></div>
       </div>
       <div style="margin-top:12px"><button class="btn ghost" id="saveSet">Übernehmen</button></div>
-      <div class="note">Der Kontostand wird bei jeder Buchung automatisch angepasst. Das Monatsbudget ist der Betrag, den du pro Monat ausgeben möchtest.</div>
+      <div class="note">Der Kontostand wird bei jeder Buchung automatisch angepasst. Das Monatsbudget ist der Betrag, den du pro Budgetmonat ausgeben möchtest. Der Budgetmonat beginnt an dem Tag, an dem dein Gehalt kommt, bei 25 also vom 25. bis zum 24. des Folgemonats. Mit 1 rechnet die App nach Kalendermonaten.</div>
     </div>
 
     <div class="month">
@@ -271,17 +290,20 @@ details summary{cursor:pointer;margin:6px 0}
   var MON=["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
   var now=new Date();
   var state=load();
-  var view={y:now.getFullYear(),m:now.getMonth()};
+  function cyc(){var c=parseInt(state.cycle,10);return c>=1&&c<=28?c:25;}
+  function periodOf(ds){var d=parse(ds),y=d.getFullYear(),m=d.getMonth();if(d.getDate()<cyc()){m--;if(m<0){m=11;y--;}}return {y:y,m:m};}
+  function pKey(p){return p.y+"-"+pad(p.m+1);}
+  var view=periodOf(iso(now));
   var txType="out";
 
   function defaults(){
-    return {start:0,monthly:0,tx:[],fix:[],sal:[],sav:[],jul:[]};
+    return {start:0,monthly:0,cycle:25,tx:[],fix:[],sal:[],sav:[],jul:[]};
   }
   function load(){
     try{
       var r=localStorage.getItem(KEY);
       if(r){var o=JSON.parse(r);var d=defaults();
-        o.start=o.start||0;o.monthly=o.monthly||0;o.tx=o.tx||[];o.fix=o.fix||[];o.sal=o.sal||[];o.sav=o.sav||[];o.jul=o.jul||[];
+        o.start=o.start||0;o.monthly=o.monthly||0;o.tx=o.tx||[];o.fix=o.fix||[];o.sal=o.sal||[];o.sav=o.sav||[];o.jul=o.jul||[];o.cycle=parseInt(o.cycle,10)||25;
         return o;}
     }catch(e){}
     return defaults();
@@ -346,36 +368,49 @@ details summary{cursor:pointer;margin:6px 0}
     state.tx.push(rec);
     $("amt").value="";$("note").value="";
     $("hhOn").checked=false;$("hhBox").classList.add("hide");
-    var d=parse($("date").value||iso(now));view={y:d.getFullYear(),m:d.getMonth()};
+    view=periodOf($("date").value||iso(now));
     save();renderB();
   };
   $("saveSet").onclick=function(){
     var b=$("setBal").value,m=$("setBud").value;
     if(b!==""){var bv=parseFloat(String(b).replace(",","."));if(!isNaN(bv))state.start=Math.round((bv-net())*100)/100;}
     if(m!==""){var mv=parseFloat(String(m).replace(",","."));if(!isNaN(mv))state.monthly=Math.max(0,mv);}
+    var cv=parseInt($("setCyc").value,10);
+    if(cv>=1&&cv<=28){state.cycle=cv;view=periodOf(iso(now));}
     save();renderB();
   };
   $("mPrev").onclick=function(){view.m--;if(view.m<0){view.m=11;view.y--;}renderB();};
   $("mNext").onclick=function(){view.m++;if(view.m>11){view.m=0;view.y++;}renderB();};
 
-  function inView(t){var d=parse(t.date);return d.getFullYear()===view.y&&d.getMonth()===view.m;}
+  function inView(t){var p=periodOf(t.date);return p.y===view.y&&p.m===view.m;}
 
   function renderB(){
     var bal=balance();
     var b=$("balance");b.textContent=eur(bal);b.classList.toggle("neg",bal<0);
     $("setBal").value=Math.round(bal*100)/100;
     $("setBud").value=state.monthly||"";
-    $("mLabel").textContent=MON[view.m]+" "+view.y;
+    $("setCyc").value=cyc();
+    var c0=cyc(),st0=new Date(view.y,view.m,c0),en0=new Date(view.y,view.m+1,c0-1);
+    $("mLabel").textContent=c0===1?MON[view.m]+" "+view.y:pad(st0.getDate())+"."+pad(st0.getMonth()+1)+". bis "+pad(en0.getDate())+"."+pad(en0.getMonth()+1)+"."+en0.getFullYear();
 
     var mt=state.tx.filter(inView);
     var spent=mt.filter(function(t){return t.type==="out";}).reduce(function(s,t){return s+(t.mine!=null?t.mine:t.amount);},0);
     var income=mt.filter(function(t){return t.type==="in";}).reduce(function(s,t){return s+t.amount;},0);
     $("spent").textContent=eur(spent);
+    var byM={},curK=pKey(periodOf(iso(now)));
+    state.tx.forEach(function(t){if(t.type!=="out")return;var k=pKey(periodOf(t.date));byM[k]=(byM[k]||0)+(t.mine!=null?t.mine:t.amount);});
+    var allK=Object.keys(byM).sort(),pastK=allK.filter(function(k){return k<curK;}),useK=(pastK.length?pastK:allK).slice(-12);
+    $("avgM").textContent=useK.length?eur(useK.reduce(function(a,k){return a+byM[k];},0)/useK.length):"noch offen";
+    $("avgN").textContent=useK.length?(pastK.length?"über "+useK.length+(useK.length===1?" Monat":" Monate"):"nur dieser Monat"):"";
     var left=state.monthly-spent;
     var l=$("left");l.textContent=state.monthly?eur(left):"Budget setzen";l.classList.toggle("neg",state.monthly>0&&left<0);
     var pct=state.monthly?Math.min(100,spent/state.monthly*100):0;
     var f=$("barfill");f.style.width=pct+"%";f.classList.toggle("over",state.monthly>0&&spent>state.monthly);
-    $("barnote").textContent=state.monthly?(Math.round(spent/state.monthly*100)+" Prozent von "+eur(state.monthly)+" ausgegeben in "+MON[view.m]+(income?", Einnahmen "+eur(income):"")):("Einnahmen in "+MON[view.m]+": "+eur(income));
+    $("barnote").textContent=state.monthly?(Math.round(spent/state.monthly*100)+" Prozent von "+eur(state.monthly)+" ausgegeben im Budgetmonat"+(income?", Einnahmen "+eur(income):"")):("Einnahmen im Budgetmonat: "+eur(income));
+    if(state.monthly>0&&left>0&&pKey(view)===pKey(periodOf(iso(now)))){
+      var dl=Math.round((new Date(view.y,view.m+1,cyc())-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
+      $("barnote").textContent+=". Pro Tag verfügbar: "+eur(left/dl)+".";
+    }
 
     var cats={};
     mt.filter(function(t){return t.type==="out";}).forEach(function(t){cats[t.cat]=(cats[t.cat]||0)+(t.mine!=null?t.mine:t.amount);});
@@ -780,8 +815,95 @@ details summary{cursor:pointer;margin:6px 0}
     }};
     $("fsheet").classList.add("show");
   }
+  function catList(type){return type==="in"?["Gehalt","Sonstiges"]:CATS.filter(function(c){return c!=="Gehalt";});}
+  function catOptions(type,sel){return catList(type).map(function(c){return '<option'+(c===sel?" selected":"")+'>'+c+'</option>';}).join("");}
+  function showTxList(mode,d){
+    var re=/^\d{4}-\d{2}-\d{2}$/;
+    var rows=(d.items||[]).map(function(x){
+      var amt=okNum(x.amount!=null?x.amount:x.price);
+      if(amt===null||amt===0)return null;
+      if(mode==="bonlist"&&amt<0)return null;
+      var inc=mode==="stmt"&&amt>0,abs=Math.abs(amt),type=inc?"in":"out";
+      var date=re.test(x.date||"")?x.date:(re.test(d.date||"")?d.date:iso(now));
+      var cat=catList(type).indexOf(x.category)>-1?x.category:"Sonstiges";
+      var name=String(x.name||"").trim()||String(d.merchant||"").trim()||"Buchung";
+      var dup=mode==="stmt"&&state.tx.some(function(t){return t.date===date&&t.type===type&&Math.abs(t.amount-abs)<0.005;});
+      return {name:name,amount:abs,date:date,type:type,cat:cat,dup:dup};
+    }).filter(Boolean);
+    if(!rows.length){toast("Es wurden keine Positionen erkannt.");return;}
+    var sum=rows.reduce(function(s,r){return s+(r.type==="out"?r.amount:0);},0),tot=okNum(d.total);
+    $("fTitle").textContent=rows.length+" Positionen erkannt";
+    $("fBody").innerHTML='<div class="mute">'+(mode==="bonlist"?"Kassenbon"+(d.merchant?" von "+esc(d.merchant):""):"Kontoauszug")+
+      '. Nimm den Haken weg bei allem, was du nicht übernehmen willst. Alles lässt sich ändern.'+
+      (mode==="bonlist"&&tot!==null?' Summe der Positionen '+eur(sum)+', Gesamtsumme auf dem Beleg '+eur(tot)+'.':'')+'</div>'+
+      '<div id="tlhh" class="hide" style="margin-top:8px"><div class="row"><div><label for="lg">Halbe Halbe Gruppe</label><select id="lg"></select></div><div><label for="lp">Bezahlt von</label><select id="lp"></select></div></div></div>'+
+      '<div style="max-height:46vh;overflow:auto;margin-top:8px">'+rows.map(function(r,i){
+        return '<div class="tl"><div class="tl1"><input type="checkbox" id="tk'+i+'"'+(r.dup?"":" checked")+'><input type="text" id="tn'+i+'" value="'+esc(r.name)+'"><input type="number" inputmode="decimal" step="0.01" id="ta'+i+'" value="'+r.amount+'"></div>'+
+          '<div class="tl2"><input type="date" id="td'+i+'" value="'+r.date+'"><select id="tt'+i+'"><option value="out"'+(r.type==="out"?" selected":"")+'>Ausgabe</option><option value="in"'+(r.type==="in"?" selected":"")+'>Einnahme</option></select></div>'+
+          '<div class="tl3"><select id="tc'+i+'">'+catOptions(r.type,r.cat)+'</select><label class="ck'+(r.type==="in"?" hide":"")+'" id="thw'+i+'"><input type="checkbox" id="th'+i+'"> Halbe Halbe</label></div>'+
+          (r.dup?'<div class="mute">Gibt es schon</div>':'')+'</div>';
+      }).join("")+'</div>';
+    function fillLp(){
+      var lp=$("lp");lp.innerHTML="";
+      [].forEach.call($("hhPayer").options,function(o){hhOpt(lp,o.value,o.textContent);});
+      lp.value=$("hhPayer").value;
+    }
+    async function ensureHH(){
+      $("tlhh").classList.remove("hide");
+      try{
+        await hhEnsure();
+        var lg=$("lg");lg.innerHTML="";
+        hhGroups.forEach(function(g){hhOpt(lg,g.id,g.name);});
+        lg.value=$("hhGroup").value;fillLp();
+        lg.onchange=function(){$("hhGroup").value=lg.value;hhMembers();fillLp();};
+        $("lp").onchange=function(){$("hhPayer").value=$("lp").value;$("hhPayer").onchange();};
+      }catch(e){toast("Halbe Halbe ist nicht erreichbar: "+(e.message||"Fehler"));}
+    }
+    $("fBody").onchange=function(e){
+      var t=e.target,id=t.id||"";
+      if(/^tt\d+$/.test(id)){
+        var i=id.slice(2);
+        $("tc"+i).innerHTML=catOptions(t.value,"");
+        $("thw"+i).classList.toggle("hide",t.value==="in");
+      }else if(/^th\d+$/.test(id)&&t.checked){ensureHH();}
+    };
+    var busy=false;
+    async function commit(){
+      if(busy)return;
+      var picked=[];
+      rows.forEach(function(r,i){
+        if(!$("tk"+i).checked)return;
+        var a=num($("ta"+i).value),nm=$("tn"+i).value.trim(),ty=$("tt"+i).value;
+        if(a===null||a<=0||!nm)return;
+        picked.push({half:ty==="out"&&$("th"+i).checked,rec:{id:Date.now()+""+i+Math.floor(Math.random()*999),type:ty,amount:Math.round(a*100)/100,cat:$("tc"+i).value,note:nm,date:$("td"+i).value||iso(now)}});
+      });
+      if(!picked.length){alert("Es ist nichts ausgewählt.");return;}
+      busy=true;$("fSave").textContent="Speichere …";
+      var halves=picked.filter(function(p){return p.half;}),nh=0;
+      if(halves.length){
+        try{
+          var res=await hhPushMany(halves.map(function(p){return p.rec;}));
+          halves.forEach(function(p,i){p.rec.hh=res.group;p.rec.mine=res.mines[i];});
+          nh=halves.length;
+        }catch(e){
+          busy=false;$("fSave").textContent="Speichern";
+          if(!confirm("Halbe Halbe ist gerade nicht erreichbar ("+(e.message||"Fehler")+"). Nur hier speichern?"))return;
+          busy=true;
+        }
+      }
+      picked.forEach(function(p){state.tx.push(p.rec);});
+      view=periodOf(picked[0].rec.date);
+      save();renderB();
+      busy=false;$("fSave").textContent="Speichern";
+      $("fsheet").classList.remove("show");
+      toast(picked.length+" Buchungen gespeichert"+(nh?", davon "+nh+" in Halbe Halbe.":"."));
+    }
+    fcb={fields:[],cb:function(){commit();return false;}};
+    $("fsheet").classList.add("show");
+  }
   function applyScan(mode,d){
     if(mode==="fixlist"){showFixList(d.items);return;}
+    if(mode==="bonlist"||mode==="stmt"){showTxList(mode,d);return;}
     if(mode==="fix"){
       var items=(Array.isArray(d.items)?d.items:[d]).filter(function(x){var n=x?okNum(x.amount):null;return x&&x.name&&n!==null&&n>0;});
       if(!items.length){toast("Es wurden keine Fixkosten erkannt.");return;}
@@ -814,7 +936,7 @@ details summary{cursor:pointer;margin:6px 0}
       if(!f)return;
       try{
         toast("Foto wird gelesen …",true);
-        var img=await shrink(f,mode==="fixlist"?2200:1600);
+        var img=await shrink(f,(mode==="fixlist"||mode==="bonlist"||mode==="stmt")?2200:1600);
         var d=await scanCall(mode,img,false);
         applyScan(mode,d);
       }catch(err){toast(err.message||"Das hat nicht geklappt.");}
@@ -823,7 +945,7 @@ details summary{cursor:pointer;margin:6px 0}
   });
 
   /* Version: bei jeder Änderung hier hochzählen */
-  var APP_VERSION="1.6.0",APP_DATE="2026-10-27";
+  var APP_VERSION="1.9.0",APP_DATE="2026-10-27";
   $("verInfo").textContent="Kassensturz Version "+APP_VERSION+" vom "+deDate(APP_DATE);
 
   /* Halbe Halbe */
@@ -898,24 +1020,28 @@ details summary{cursor:pointer;margin:6px 0}
     if(m){try{localStorage.setItem("kassensturz_hh_me",m.name);}catch(e){}}
     hhWith();
   };
-  async function hhPush(rec){
+  async function hhPushMany(recs){
     await hhEnsure();
     var g=hhCur(),payer=$("hhPayer").value;
     var others=g.members.filter(function(m){return m.id!==payer;});
     var other=others.length===1?others[0].id:$("hhWith").value;
-    var total=Math.round(rec.amount*100),half=Math.floor(total/2),sp={};
     var ids=g.members.map(function(m){return m.id;}).filter(function(i){return i===payer||i===other;});
-    ids.forEach(function(k){sp[k]=half;});
-    if(total-2*half>0)sp[ids[0]]+=1;
-    var db=await hhDbGet(),ref=hhRef(db),now2=Date.now();
-    var eid="e"+Math.random().toString(36).slice(2,10)+now2.toString(36).slice(-3);
-    var out={id:eid,type:"expense",desc:rec.note||rec.cat,amount:total,payer:payer,splits:sp,mode:"equal",raw:{},date:rec.date,ts:now2,mts:now2};
+    var db=await hhDbGet(),ref=hhRef(db),base=Date.now(),outs=[],mines=[];
+    recs.forEach(function(rec,n){
+      var total=Math.round(rec.amount*100),half=Math.floor(total/2),sp={};
+      ids.forEach(function(k){sp[k]=half;});
+      if(total-2*half>0)sp[ids[0]]+=1;
+      var eid="e"+Math.random().toString(36).slice(2,10)+(base+n).toString(36).slice(-3);
+      outs.push({id:eid,type:"expense",desc:rec.note||rec.cat,amount:total,payer:payer,splits:sp,mode:"equal",raw:{},date:rec.date,ts:base+n,mts:base+n});
+      mines.push(sp[payer]/100);
+    });
     await db.runTransaction(function(tx){
       return tx.get(ref).then(function(s){
         var gs=JSON.parse(JSON.stringify((s.exists&&s.data().value&&s.data().value.groups)||[]));
         var t=gs.filter(function(x){return x.id===g.id;})[0];
         if(!t)throw new Error("Gruppe nicht gefunden");
-        t.expenses=t.expenses||[];t.expenses.push(out);
+        t.expenses=t.expenses||[];
+        outs.forEach(function(o){t.expenses.push(o);});
         tx.set(ref,{value:{groups:gs},updatedAt:Date.now()});
       });
     });
@@ -923,7 +1049,11 @@ details summary{cursor:pointer;margin:6px 0}
       localStorage.setItem("kassensturz_hh_group",g.id);
       localStorage.setItem("kassensturz_hh_me",g.members.filter(function(m){return m.id===payer;})[0].name);
     }catch(e){}
-    return {group:g.name,mine:sp[payer]/100};
+    return {group:g.name,mines:mines};
+  }
+  async function hhPush(rec){
+    var r=await hhPushMany([rec]);
+    return {group:r.group,mine:r.mines[0]};
   }
 
   /* Beitrag von Julia */
