@@ -210,9 +210,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
           <div class="note" id="hhNote"></div>
         </div>
       </div>
-      <div class="row" style="margin-top:14px"><button class="btn ghost" data-scan="bon">Kassenbon als Summe</button><button class="btn ghost" data-scan="bonlist">Kassenbon in Positionen</button></div>
-      <div style="margin-top:8px"><button class="btn ghost" data-scan="stmt" style="width:100%">Kontoauszug scannen</button></div>
-      <div style="margin-top:8px"><button class="btn" id="addTx" style="width:100%">Buchung speichern</button></div>
+      <div class="row" style="margin-top:14px"><button class="btn ghost" data-scan="beleg">Beleg scannen</button><button class="btn" id="addTx">Buchung speichern</button></div>
     </div>
 
     <div class="card">
@@ -361,7 +359,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
         toast("In Halbe Halbe gespeichert.");
       }catch(e){
         txBusy=false;$("addTx").textContent="Buchung speichern";
-        if(!confirm("Halbe Halbe ist gerade nicht erreichbar ("+(e.message||"Fehler")+"). Nur hier speichern?"))return;
+        if(!confirm("Halbe Halbe ist gerade nicht erreichbar ("+hhErr(e)+"). Nur hier speichern?"))return;
       }
       txBusy=false;$("addTx").textContent="Buchung speichern";
     }
@@ -524,7 +522,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
       }).join("")+'</div>';
       h+='<div class="acts"><button class="btn ghost small" data-act="chgFix" data-id="'+it.id+'">Preis ändern</button><button class="btn danger small" data-act="delFix" data-id="'+it.id+'">Löschen</button></div></div>';
     });
-    h+='<div class="row" style="margin-top:12px"><button class="btn" data-act="addFix">Fixkosten hinzufügen</button><button class="btn ghost" data-scan="fix">Foto scannen</button></div><div style="margin-top:8px"><button class="btn ghost" data-scan="fixlist" style="width:100%">Tabelle oder Liste scannen</button></div>';
+    h+='<div class="row" style="margin-top:12px"><button class="btn" data-act="addFix">Fixkosten hinzufügen</button><button class="btn ghost" data-scan="fixauto">Beleg scannen</button></div>';
     h+='<div class="note">Tipp: Mit einem früheren Monat bei „Gültig ab“ kannst du auch alte Preise eintragen, damit die Entwicklung über die Jahre sichtbar wird.</div></div>';
     var jc=julAt(CUR),jx=fixTotal(CUR),js=state.jul.slice().sort(function(a,b){return a.from<b.from?-1:1;});
     h+='<div class="card"><h2>Beitrag von Julia</h2><div class="big">'+eur(jc)+'</div><div class="note">'+
@@ -817,7 +815,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
   }
   function catList(type){return type==="in"?["Gehalt","Sonstiges"]:CATS.filter(function(c){return c!=="Gehalt";});}
   function catOptions(type,sel){return catList(type).map(function(c){return '<option'+(c===sel?" selected":"")+'>'+c+'</option>';}).join("");}
-  function showTxList(mode,d){
+  function showTxList(mode,d,single){
     var re=/^\d{4}-\d{2}-\d{2}$/;
     var rows=(d.items||[]).map(function(x){
       var amt=okNum(x.amount!=null?x.amount:x.price);
@@ -831,9 +829,14 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
       return {name:name,amount:abs,date:date,type:type,cat:cat,dup:dup};
     }).filter(Boolean);
     if(!rows.length){toast("Es wurden keine Positionen erkannt.");return;}
+    if(single&&mode==="bonlist"){
+      var tt=okNum(d.total),ss=rows.reduce(function(a,r){return a+r.amount;},0),cnt={},best="Sonstiges",bn=0;
+      rows.forEach(function(r){cnt[r.cat]=(cnt[r.cat]||0)+1;if(cnt[r.cat]>bn){bn=cnt[r.cat];best=r.cat;}});
+      rows=[{name:String(d.merchant||"").trim()||"Kassenbon",amount:(tt!==null&&tt>0)?tt:Math.round(ss*100)/100,date:rows[0].date,type:"out",cat:best,dup:false}];
+    }
     var sum=rows.reduce(function(s,r){return s+(r.type==="out"?r.amount:0);},0),tot=okNum(d.total);
-    $("fTitle").textContent=rows.length+" Positionen erkannt";
-    $("fBody").innerHTML='<div class="mute">'+(mode==="bonlist"?"Kassenbon"+(d.merchant?" von "+esc(d.merchant):""):"Kontoauszug")+
+    $("fTitle").textContent=single?"Gesamtsumme erkannt":rows.length+" Positionen erkannt";
+    $("fBody").innerHTML=(mode==="bonlist"?'<div class="seg" id="tlSeg"><button data-v="pos"'+(single?"":' class="on"')+'>Positionen</button><button data-v="sum"'+(single?' class="on"':"")+'>Gesamtsumme</button></div>':'')+'<div class="mute">'+(mode==="bonlist"?"Kassenbon"+(d.merchant?" von "+esc(d.merchant):""):"Kontoauszug")+
       '. Nimm den Haken weg bei allem, was du nicht übernehmen willst. Alles lässt sich ändern.'+
       (mode==="bonlist"&&tot!==null?' Summe der Positionen '+eur(sum)+', Gesamtsumme auf dem Beleg '+eur(tot)+'.':'')+'</div>'+
       '<div id="tlhh" class="hide" style="margin-top:8px"><div class="row"><div><label for="lg">Halbe Halbe Gruppe</label><select id="lg"></select></div><div><label for="lp">Bezahlt von</label><select id="lp"></select></div></div></div>'+
@@ -843,6 +846,12 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
           '<div class="tl3"><select id="tc'+i+'">'+catOptions(r.type,r.cat)+'</select><label class="ck'+(r.type==="in"?" hide":"")+'" id="thw'+i+'"><input type="checkbox" id="th'+i+'"> Halbe Halbe</label></div>'+
           (r.dup?'<div class="mute">Gibt es schon</div>':'')+'</div>';
       }).join("")+'</div>';
+    if(mode==="bonlist"){
+      $("tlSeg").onclick=function(e){
+        var b=e.target.closest("[data-v]");if(!b)return;
+        showTxList(mode,d,b.getAttribute("data-v")==="sum");
+      };
+    }
     function fillLp(){
       var lp=$("lp");lp.innerHTML="";
       [].forEach.call($("hhPayer").options,function(o){hhOpt(lp,o.value,o.textContent);});
@@ -857,7 +866,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
         lg.value=$("hhGroup").value;fillLp();
         lg.onchange=function(){$("hhGroup").value=lg.value;hhMembers();fillLp();};
         $("lp").onchange=function(){$("hhPayer").value=$("lp").value;$("hhPayer").onchange();};
-      }catch(e){toast("Halbe Halbe ist nicht erreichbar: "+(e.message||"Fehler"));}
+      }catch(e){toast("Halbe Halbe ist nicht erreichbar: "+hhErr(e));}
     }
     $("fBody").onchange=function(e){
       var t=e.target,id=t.id||"";
@@ -887,7 +896,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
           nh=halves.length;
         }catch(e){
           busy=false;$("fSave").textContent="Speichern";
-          if(!confirm("Halbe Halbe ist gerade nicht erreichbar ("+(e.message||"Fehler")+"). Nur hier speichern?"))return;
+          if(!confirm("Halbe Halbe ist gerade nicht erreichbar ("+hhErr(e)+"). Nur hier speichern?"))return;
           busy=true;
         }
       }
@@ -903,7 +912,14 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
   }
   function applyScan(mode,d){
     if(mode==="fixlist"){showFixList(d.items);return;}
-    if(mode==="bonlist"||mode==="stmt"){showTxList(mode,d);return;}
+    if(mode==="fixauto"){
+      var fi=(d.items||[]).filter(function(x){return x&&x.name&&okNum(x.amount)>0;});
+      if(!fi.length){toast("Es wurden keine Fixkosten erkannt.");return;}
+      if(fi.length===1){applyScan("fix",fi[0]);return;}
+      showFixList(fi);return;
+    }
+    if(mode==="beleg"){showTxList(d.type==="auszug"?"stmt":"bonlist",d,false);return;}
+    if(mode==="bonlist"||mode==="stmt"){showTxList(mode,d,false);return;}
     if(mode==="fix"){
       var items=(Array.isArray(d.items)?d.items:[d]).filter(function(x){var n=x?okNum(x.amount):null;return x&&x.name&&n!==null&&n>0;});
       if(!items.length){toast("Es wurden keine Fixkosten erkannt.");return;}
@@ -936,7 +952,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
       if(!f)return;
       try{
         toast("Foto wird gelesen …",true);
-        var img=await shrink(f,(mode==="fixlist"||mode==="bonlist"||mode==="stmt")?2200:1600);
+        var img=await shrink(f,(mode==="fixlist"||mode==="fixauto"||mode==="beleg")?2200:1600);
         var d=await scanCall(mode,img,false);
         applyScan(mode,d);
       }catch(err){toast(err.message||"Das hat nicht geklappt.");}
@@ -945,12 +961,19 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
   });
 
   /* Version: bei jeder Änderung hier hochzählen */
-  var APP_VERSION="1.9.0",APP_DATE="2026-10-27";
+  var APP_VERSION="2.1.0",APP_DATE="2026-10-27";
   $("verInfo").textContent="Kassensturz Version "+APP_VERSION+" vom "+deDate(APP_DATE);
 
   /* Halbe Halbe */
   var KS_FB={apiKey:"AIzaSyBFbKIBKr0gr621e8XSljAG4lGXOSrIxwo",authDomain:"homedashboard-8d951.firebaseapp.com",projectId:"homedashboard-8d951",storageBucket:"homedashboard-8d951.firebasestorage.app",messagingSenderId:"443725141758",appId:"1:443725141758:web:64331ff8100f27acd037af"};
   var HH_COL="household",HH_DOC="halbehalbe",hhGroups=null,hhDb=null;
+  function withTimeout(p,ms){
+    return new Promise(function(res,rej){
+      var t=setTimeout(function(){rej(new Error("Zeitüberschreitung, keine Antwort von Firebase"));},ms);
+      p.then(function(v){clearTimeout(t);res(v);},function(e){clearTimeout(t);rej(e);});
+    });
+  }
+  function hhErr(e){return (e&&e.code?e.code+": ":"")+((e&&e.message)||"Fehler");}
   function loadScript(src){
     return new Promise(function(res,rej){
       var el=document.createElement("script");el.src=src;el.onload=res;
@@ -966,11 +989,12 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
     }
     if(!firebase.apps.length)firebase.initializeApp(KS_FB);
     hhDb=firebase.firestore();
+    try{hhDb.settings({experimentalAutoDetectLongPolling:true,merge:true});}catch(e){}
     return hhDb;
   }
   function hhRef(db){return db.collection(HH_COL).doc(HH_DOC);}
   async function hhLoad(){
-    var db=await hhDbGet(),snap=await hhRef(db).get();
+    var db=await withTimeout(hhDbGet(),12000),snap=await withTimeout(hhRef(db).get(),12000);
     var gs=(snap.exists&&snap.data().value&&snap.data().value.groups)||[];
     hhGroups=gs.filter(function(g){return g.members&&g.members.length>=2;}).map(function(g){
       return {id:g.id,name:g.name||"Gruppe",members:g.members.map(function(m){return {id:m.id,name:m.name};})};
@@ -1011,7 +1035,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
     $("hhBox").classList.toggle("hide",!this.checked);
     if(this.checked&&!hhGroups){
       $("hhNote").textContent="Gruppen werden geladen …";
-      hhEnsure().catch(function(e){$("hhNote").textContent="Halbe Halbe ist nicht erreichbar: "+(e.message||"Fehler");});
+      hhEnsure().catch(function(e){$("hhNote").textContent="Halbe Halbe ist nicht erreichbar: "+hhErr(e);});
     }
   };
   $("hhGroup").onchange=hhMembers;
@@ -1026,7 +1050,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
     var others=g.members.filter(function(m){return m.id!==payer;});
     var other=others.length===1?others[0].id:$("hhWith").value;
     var ids=g.members.map(function(m){return m.id;}).filter(function(i){return i===payer||i===other;});
-    var db=await hhDbGet(),ref=hhRef(db),base=Date.now(),outs=[],mines=[];
+    var db=await withTimeout(hhDbGet(),12000),ref=hhRef(db),base=Date.now(),outs=[],mines=[];
     recs.forEach(function(rec,n){
       var total=Math.round(rec.amount*100),half=Math.floor(total/2),sp={};
       ids.forEach(function(k){sp[k]=half;});
@@ -1035,7 +1059,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
       outs.push({id:eid,type:"expense",desc:rec.note||rec.cat,amount:total,payer:payer,splits:sp,mode:"equal",raw:{},date:rec.date,ts:base+n,mts:base+n});
       mines.push(sp[payer]/100);
     });
-    await db.runTransaction(function(tx){
+    await withTimeout(db.runTransaction(function(tx){
       return tx.get(ref).then(function(s){
         var gs=JSON.parse(JSON.stringify((s.exists&&s.data().value&&s.data().value.groups)||[]));
         var t=gs.filter(function(x){return x.id===g.id;})[0];
@@ -1044,7 +1068,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
         outs.forEach(function(o){t.expenses.push(o);});
         tx.set(ref,{value:{groups:gs},updatedAt:Date.now()});
       });
-    });
+    }),15000);
     try{
       localStorage.setItem("kassensturz_hh_group",g.id);
       localStorage.setItem("kassensturz_hh_me",g.members.filter(function(m){return m.id===payer;})[0].name);
