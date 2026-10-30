@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Kassensturz</title>
 <meta name="theme-color" content="#2b3f8f">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -152,6 +152,8 @@ details summary{cursor:pointer;margin:6px 0}
 input[type=date],input[type=month]{-webkit-appearance:none;appearance:none;display:block;width:100%;min-width:0;max-width:100%;text-align:left;min-height:46px;line-height:1.2}
 input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-and-time-value{text-align:left;min-height:1.2em}
 .row>*{min-width:0}
+html{touch-action:manipulation;-webkit-text-size-adjust:100%}
+input,select,textarea{font-size:16px}
 </style>
 </head>
 <body>
@@ -794,11 +796,11 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
   function showFixList(items){
     items=(items||[]).map(function(x){return {name:String(x.name||"").trim(),amount:okNum(x.amount)};}).filter(function(x){return x.name&&x.amount>0;});
     if(!items.length){toast("Es wurden keine Positionen mit Betrag erkannt.");return;}
-    var have=state.fix.map(function(f){return f.name.toLowerCase();});
+    var have=state.fix.map(function(f){return f.name.toLowerCase();}),seen={};
     $("fTitle").textContent=items.length+" Positionen erkannt";
     $("fBody").innerHTML='<div class="mute">Nimm den Haken weg bei allem, was du nicht übernehmen willst. Namen und Beträge kannst du ändern.</div><label for="lm">Gültig ab</label><input id="lm" type="month" value="'+CUR+'"><div style="max-height:45vh;overflow:auto;margin-top:10px">'+items.map(function(x,i){
-      var dup=have.indexOf(x.name.toLowerCase())>-1;
-      return '<div class="lr"><input type="checkbox" data-l="'+i+'"'+(dup?"":" checked")+'><input type="text" value="'+esc(x.name)+'" id="ln'+i+'"><input type="number" inputmode="decimal" step="0.01" value="'+x.amount+'" id="la'+i+'"></div>'+(dup?'<div class="mute" style="margin:-2px 0 6px 32px">Gibt es schon</div>':'');
+      var low=x.name.toLowerCase(),why=have.indexOf(low)>-1?"Gibt es schon":(seen[low]?"Doppelt im Bild":""),dup=!!why;seen[low]=1;
+      return '<div class="lr"><input type="checkbox" data-l="'+i+'"'+(dup?"":" checked")+'><input type="text" value="'+esc(x.name)+'" id="ln'+i+'"><input type="number" inputmode="decimal" step="0.01" value="'+x.amount+'" id="la'+i+'"></div>'+(dup?'<div class="mute" style="margin:-2px 0 6px 32px;color:var(--accent2)">'+why+'</div>':'');
     }).join("")+'</div>';
     fcb={fields:[],cb:function(){
       var from=$("lm").value||CUR,n=0;
@@ -825,7 +827,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
       var date=re.test(x.date||"")?x.date:(re.test(d.date||"")?d.date:iso(now));
       var cat=catList(type).indexOf(x.category)>-1?x.category:"Sonstiges";
       var name=String(x.name||"").trim()||String(d.merchant||"").trim()||"Buchung";
-      var dup=mode==="stmt"&&state.tx.some(function(t){return t.date===date&&t.type===type&&Math.abs(t.amount-abs)<0.005;});
+      var dup=false;
       return {name:name,amount:abs,date:date,type:type,cat:cat,dup:dup};
     }).filter(Boolean);
     if(!rows.length){toast("Es wurden keine Positionen erkannt.");return;}
@@ -834,17 +836,33 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
       rows.forEach(function(r){cnt[r.cat]=(cnt[r.cat]||0)+1;if(cnt[r.cat]>bn){bn=cnt[r.cat];best=r.cat;}});
       rows=[{name:String(d.merchant||"").trim()||"Kassenbon",amount:(tt!==null&&tt>0)?tt:Math.round(ss*100)/100,date:rows[0].date,type:"out",cat:best,dup:false}];
     }
+    function dayDiff(a,b){return Math.abs((parse(a)-parse(b))/864e5);}
+    rows.forEach(function(r,i){
+      r.dupWhy="";
+      if(mode==="stmt"||single){
+        var ex=state.tx.some(function(t){return t.type===r.type&&Math.abs(t.amount-r.amount)<0.005&&dayDiff(t.date,r.date)<=1;});
+        if(ex)r.dupWhy="Gibt es schon";
+      }
+      if(!r.dupWhy&&mode==="stmt"){
+        for(var j=0;j<i;j++){
+          var q=rows[j];
+          if(q.type===r.type&&Math.abs(q.amount-r.amount)<0.005&&q.date===r.date&&q.name.toLowerCase()===r.name.toLowerCase()){r.dupWhy="Doppelt im Bild";break;}
+        }
+      }
+      r.dup=!!r.dupWhy;
+    });
+    var ndup=rows.filter(function(r){return r.dup;}).length;
     var sum=rows.reduce(function(s,r){return s+(r.type==="out"?r.amount:0);},0),tot=okNum(d.total);
     $("fTitle").textContent=single?"Gesamtsumme erkannt":rows.length+" Positionen erkannt";
     $("fBody").innerHTML=(mode==="bonlist"?'<div class="seg" id="tlSeg"><button data-v="pos"'+(single?"":' class="on"')+'>Positionen</button><button data-v="sum"'+(single?' class="on"':"")+'>Gesamtsumme</button></div>':'')+'<div class="mute">'+(mode==="bonlist"?"Kassenbon"+(d.merchant?" von "+esc(d.merchant):""):"Kontoauszug")+
-      '. Nimm den Haken weg bei allem, was du nicht übernehmen willst. Alles lässt sich ändern.'+
+      '. Nimm den Haken weg bei allem, was du nicht übernehmen willst. Alles lässt sich ändern.'+(ndup?' '+ndup+(ndup===1?' mögliches Duplikat ist':' mögliche Duplikate sind')+' nicht ausgewählt.':'')+
       (mode==="bonlist"&&tot!==null?' Summe der Positionen '+eur(sum)+', Gesamtsumme auf dem Beleg '+eur(tot)+'.':'')+'</div>'+
       '<div id="tlhh" class="hide" style="margin-top:8px"><div class="row"><div><label for="lg">Halbe Halbe Gruppe</label><select id="lg"></select></div><div><label for="lp">Bezahlt von</label><select id="lp"></select></div></div></div>'+
       '<div style="max-height:46vh;overflow:auto;margin-top:8px">'+rows.map(function(r,i){
         return '<div class="tl"><div class="tl1"><input type="checkbox" id="tk'+i+'"'+(r.dup?"":" checked")+'><input type="text" id="tn'+i+'" value="'+esc(r.name)+'"><input type="number" inputmode="decimal" step="0.01" id="ta'+i+'" value="'+r.amount+'"></div>'+
           '<div class="tl2"><input type="date" id="td'+i+'" value="'+r.date+'"><select id="tt'+i+'"><option value="out"'+(r.type==="out"?" selected":"")+'>Ausgabe</option><option value="in"'+(r.type==="in"?" selected":"")+'>Einnahme</option></select></div>'+
           '<div class="tl3"><select id="tc'+i+'">'+catOptions(r.type,r.cat)+'</select><label class="ck'+(r.type==="in"?" hide":"")+'" id="thw'+i+'"><input type="checkbox" id="th'+i+'"> Halbe Halbe</label></div>'+
-          (r.dup?'<div class="mute">Gibt es schon</div>':'')+'</div>';
+          (r.dup?'<div class="mute" style="color:var(--accent2)">'+r.dupWhy+'</div>':'')+'</div>';
       }).join("")+'</div>';
     if(mode==="bonlist"){
       $("tlSeg").onclick=function(e){
@@ -960,8 +978,11 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
     inp.click();
   });
 
+  /* Zoom abschalten (Pinch und Doppeltipp) */
+  ["gesturestart","gesturechange","gestureend"].forEach(function(ev){document.addEventListener(ev,function(e){e.preventDefault();});});
+
   /* Version: bei jeder Änderung hier hochzählen */
-  var APP_VERSION="2.1.0",APP_DATE="2026-10-27";
+  var APP_VERSION="2.2.0",APP_DATE="2026-10-27";
   $("verInfo").textContent="Kassensturz Version "+APP_VERSION+" vom "+deDate(APP_DATE);
 
   /* Halbe Halbe */
