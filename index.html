@@ -156,6 +156,22 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 input,select,textarea{font-size:16px}
 .btn.icon{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px}
 .tl4{margin-top:6px}
+.chead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.chead h2{margin:0}
+.chead .btn{white-space:nowrap}
+.wrap{padding-top:10px}
+.brand{margin:0}
+.brand svg{width:38px;height:38px}
+h1{font-size:23px}
+.sub{margin:2px 0 10px}
+.card{padding:14px;margin-bottom:12px}
+.big{font-size:30px}
+.stat{padding:10px}
+.stat b{font-size:18px}
+.card label{margin:8px 0 3px}
+#bp_alltag .row>div>input,#bp_alltag .row>div>select{margin-top:0}
+.tabs{margin-bottom:10px}
+.seg{margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -181,30 +197,30 @@ input,select,textarea{font-size:16px}
         <div class="avg"><small>Ø Ausgaben pro Monat</small><b id="avgM">0,00 €</b><small id="avgN"></small></div>
       </div>
       <div class="row" style="margin-top:12px">
-        <div class="stat"><small>Ausgegeben im Budgetmonat</small><b id="spent">0,00 €</b></div>
+        <div class="stat"><small>Ausgegeben</small><b id="spent">0,00 €</b></div>
         <div class="stat"><small>Noch verfügbar</small><b id="left">0,00 €</b></div>
       </div>
       <div class="bar"><i id="barfill" style="width:0"></i></div>
       <div class="note" id="barnote"></div>
+      <div class="note" id="dayNote" style="margin-top:6px;color:var(--ink)"></div>
     </div>
 
     <div class="card">
-      <h2>Neue Buchung</h2>
+      <div class="chead"><h2>Neue Buchung</h2><button class="btn ghost small" data-scan="beleg" style="display:inline-flex;align-items:center"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;margin-right:6px;flex:none"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13.5" r="3.5"/></svg>Beleg scannen</button></div>
       <div class="seg" id="typeSeg">
         <button data-t="out" class="on">Ausgabe</button>
         <button data-t="in">Einnahme</button>
       </div>
       <div class="row">
-        <div><label for="amt">Betrag in Euro</label><input id="amt" type="number" inputmode="decimal" step="0.01" placeholder="0,00"></div>
-        <div><label for="date">Datum</label><input id="date" type="date"></div>
+        <div><input id="amt" type="number" inputmode="decimal" step="0.01" placeholder="Betrag in Euro" aria-label="Betrag in Euro"></div>
+        <div><input id="date" type="date" aria-label="Datum"></div>
       </div>
       <div class="row">
-        <div><label for="cat">Kategorie</label>
-          <select id="cat"></select></div>
-        <div><label for="note">Notiz</label><input id="note" type="text" placeholder="z. B. Rewe"></div>
+        <div><select id="cat" aria-label="Kategorie"></select></div>
+        <div><input id="note" type="text" placeholder="Notiz, z. B. Rewe" aria-label="Notiz"></div>
       </div>
       <div id="hhWrap">
-        <label class="ck" style="margin-top:14px"><input type="checkbox" id="hhOn"> In Halbe Halbe teilen, durch zwei</label>
+        <label class="ck" style="margin-top:12px"><input type="checkbox" id="hhOn"> In Halbe Halbe teilen, durch zwei</label>
         <div id="hhBox" class="hide">
           <div class="row">
             <div><label for="hhGroup">Gruppe</label><select id="hhGroup"></select></div>
@@ -214,11 +230,11 @@ input,select,textarea{font-size:16px}
           <div class="note" id="hhNote"></div>
         </div>
       </div>
-      <div class="row" style="margin-top:14px"><button class="btn ghost" data-scan="beleg">Beleg scannen</button><button class="btn" id="addTx">Buchung speichern</button></div>
+      <div style="margin-top:12px"><button class="btn" id="addTx" style="width:100%">Buchung speichern</button></div>
     </div>
 
-    <div class="card">
-      <h2>Einstellungen</h2>
+    <button type="button" class="tog" id="setToggle" style="margin-bottom:12px">⚙️ Einstellungen ▾</button>
+    <div class="card hide" id="setArea">
       <div class="row">
         <div><label for="setBal">Kontostand heute in Euro</label><input id="setBal" type="number" inputmode="decimal" step="0.01" placeholder="0,00"></div>
         <div><label for="setBud">Monatsbudget in Euro</label><input id="setBud" type="number" inputmode="decimal" step="0.01" placeholder="0,00"></div>
@@ -380,6 +396,7 @@ input,select,textarea{font-size:16px}
     if(m!==""){var mv=parseFloat(String(m).replace(",","."));if(!isNaN(mv))state.monthly=Math.max(0,mv);}
     var cv=parseInt($("setCyc").value,10);
     if(cv>=1&&cv<=28){state.cycle=cv;view=periodOf(iso(now));}
+    $("setArea").classList.add("hide");setLabel();
     save();renderB();
   };
   $("mPrev").onclick=function(){view.m--;if(view.m<0){view.m=11;view.y--;}renderB();};
@@ -410,9 +427,18 @@ input,select,textarea{font-size:16px}
     var pct=state.monthly?Math.min(100,spent/state.monthly*100):0;
     var f=$("barfill");f.style.width=pct+"%";f.classList.toggle("over",state.monthly>0&&spent>state.monthly);
     $("barnote").textContent=state.monthly?(Math.round(spent/state.monthly*100)+" Prozent von "+eur(state.monthly)+" ausgegeben im Budgetmonat"+(income?", Einnahmen "+eur(income):"")):("Einnahmen im Budgetmonat: "+eur(income));
-    if(state.monthly>0&&left>0&&pKey(view)===pKey(periodOf(iso(now)))){
+    var dn=$("dayNote");dn.textContent="";
+    if(state.monthly>0&&pKey(view)===pKey(periodOf(iso(now)))){
       var dl=Math.round((new Date(view.y,view.m+1,cyc())-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
-      $("barnote").textContent+=". Pro Tag verfügbar: "+eur(left/dl)+".";
+      var ti=iso(now),sb=0,sto=0;
+      mt.forEach(function(t){if(t.type!=="out")return;var bb=bud(t);if(t.date<ti)sb+=bb;else if(t.date===ti)sto+=bb;});
+      var allow=(state.monthly-sb)/dl,restT=allow-sto,after=state.monthly-sb-sto;
+      if(after<=0)dn.textContent="Das Budget für diesen Budgetmonat ist aufgebraucht.";
+      else{
+        var tx2=restT>=0?"Heute noch verfügbar: "+eur(restT)+".":"Heute schon "+eur(-restT)+" über dem Tagesbudget.";
+        if(dl>1)tx2+=" Ab morgen pro Tag: "+eur(after/(dl-1))+".";
+        dn.textContent=tx2;
+      }
     }
 
     var cats={};
@@ -1027,7 +1053,7 @@ input,select,textarea{font-size:16px}
   ["gesturestart","gesturechange","gestureend"].forEach(function(ev){document.addEventListener(ev,function(e){e.preventDefault();});});
 
   /* Version: bei jeder Änderung hier hochzählen */
-  var APP_VERSION="2.5.0",APP_DATE="2026-10-27";
+  var APP_VERSION="2.6.0",APP_DATE="2026-10-27";
   $("verInfo").textContent="Kassensturz Version "+APP_VERSION+" vom "+deDate(APP_DATE);
 
   /* Halbe Halbe */
@@ -1281,6 +1307,8 @@ input,select,textarea{font-size:16px}
     var old=!d||Math.floor((Date.now()-parse(d).getTime())/86400000)>30;
     $("bkToggle").textContent=open?"✕ Datensicherung ausblenden":"🛟 Datensicherung"+(old?" (bitte sichern)":"")+" ▾";
   }
+  function setLabel(){var open=!$("setArea").classList.contains("hide");$("setToggle").textContent=open?"✕ Einstellungen ausblenden":"⚙️ Einstellungen ▾";}
+  $("setToggle").onclick=function(){$("setArea").classList.toggle("hide");setLabel();};
   $("bkToggle").onclick=function(){$("bkArea").classList.toggle("hide");bkLabel();};
   bkInfo();
 
