@@ -180,6 +180,11 @@ h1{font-size:23px}
 .dayw .dcol{display:flex;flex-direction:column;align-items:center;font-size:10px;line-height:1.25;min-width:36px;opacity:.95}
 .dayw .dbar{width:12px;margin-bottom:4px;border-radius:2px;background:repeating-linear-gradient(to top,rgba(255,255,255,.95) 0 3px,rgba(255,255,255,0) 3px 5px)}
 .fg{padding:9px 10px;font-size:14px}
+.wk{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;border:0;border-top:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;padding:12px 0;cursor:pointer;text-align:left}
+.wk:first-child{border-top:0}
+.wk small{display:block;color:var(--mute);font-size:12px}
+.wk .wkr{font-weight:600;white-space:nowrap}
+.wk i{font-style:normal;color:var(--mute);margin-left:4px}
 </style>
 </head>
 <body>
@@ -317,6 +322,7 @@ h1{font-size:23px}
   var MON=["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
   var now=new Date();
   var state=load();
+  var openWk={};
   function bud(t){return t.fix?0:(t.mine!=null?t.mine:t.amount);}
   function cyc(){var c=parseInt(state.cycle,10);return c>=1&&c<=28?c:25;}
   function periodOf(ds){var d=parse(ds),y=d.getFullYear(),m=d.getMonth();if(d.getDate()<cyc()){m--;if(m<0){m=11;y--;}}return {y:y,m:m};}
@@ -463,10 +469,25 @@ h1{font-size:23px}
     $("cats").innerHTML=keys.length?keys.map(function(k){return '<div class="cat"><span>'+esc(k)+'</span><b>'+eur(cats[k])+'</b></div>';}).join(""):'<div class="empty">Noch keine Ausgaben in diesem Monat.</div>';
 
     var list=mt.slice().sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:(a.id<b.id?1:-1);});
-    $("txList").innerHTML=list.length?list.map(function(t){
+    var weeks=[],wmap={};
+    list.forEach(function(t){
+      var d=parse(t.date),mo=new Date(d.getFullYear(),d.getMonth(),d.getDate()-((d.getDay()+6)%7)),k=iso(mo);
+      if(!wmap[k]){wmap[k]={key:k,mon:mo,items:[]};weeks.push(wmap[k]);}
+      wmap[k].items.push(t);
+    });
+    function dm(d){return pad(d.getDate())+"."+pad(d.getMonth()+1)+".";}
+    function isoWeek(d){var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())),day=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-day);var y0=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y0)/864e5+1)/7);}
+    function txRow(t){
       return '<div class="tx"><div class="m"><b>'+esc(t.note||t.cat)+'</b><small>'+deDate(t.date)+' · '+esc(t.cat)+(t.hh?' · geteilt, dein Anteil '+eur(t.mine):'')+(t.po?' · '+esc(t.po)+' hat bezahlt':'')+(t.fix?' · Fixkosten: '+esc(t.fix):'')+'</small></div>'+
         '<div class="a '+(t.type==="in"?"in":"")+'">'+(t.type==="in"?"+":"minus ")+eur(t.amount).replace("minus ","")+'</div>'+
         '<button class="x" data-edit="'+t.id+'" aria-label="Bearbeiten"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><button class="x" data-del="'+t.id+'" aria-label="Löschen">×</button></div>';
+    }
+    $("txList").innerHTML=weeks.length?weeks.map(function(w,i){
+      var open=openWk[w.key]!==undefined?openWk[w.key]:(i===0);
+      var sun=new Date(w.mon.getFullYear(),w.mon.getMonth(),w.mon.getDate()+6);
+      var sum=w.items.reduce(function(a,t){return a+(t.type==="out"?bud(t):0);},0);
+      var n=w.items.length;
+      return '<button type="button" class="wk" data-wk="'+w.key+'"><span><b>KW '+isoWeek(w.mon)+'</b><small>'+dm(w.mon)+' bis '+dm(sun)+' · '+n+(n===1?' Buchung':' Buchungen')+'</small></span><span class="wkr">'+eur(sum)+' <i>'+(open?'▴':'▾')+'</i></span></button>'+(open?w.items.map(txRow).join(""):"");
     }).join(""):'<div class="empty">Keine Buchungen in diesem Monat.</div>';
     document.querySelectorAll("[data-del]").forEach(function(btn){
       btn.onclick=function(){
@@ -479,6 +500,12 @@ h1{font-size:23px}
     });
     document.querySelectorAll("[data-edit]").forEach(function(btn){
       btn.onclick=function(){editTx(btn.getAttribute("data-edit"));};
+    });
+    document.querySelectorAll("[data-wk]").forEach(function(btn){
+      btn.onclick=function(){
+        var k=btn.getAttribute("data-wk"),cur=openWk[k]!==undefined?openWk[k]:(weeks.length&&weeks[0].key===k);
+        openWk[k]=!cur;renderB();
+      };
     });
   }
 
@@ -1083,7 +1110,7 @@ h1{font-size:23px}
   ["gesturestart","gesturechange","gestureend"].forEach(function(ev){document.addEventListener(ev,function(e){e.preventDefault();});});
 
   /* Version: bei jeder Änderung hier hochzählen */
-  var APP_VERSION="2.13.0",APP_DATE="2026-10-27";
+  var APP_VERSION="2.14.0",APP_DATE="2026-10-27";
   $("verInfo").textContent="Kassensturz Version "+APP_VERSION+" vom "+deDate(APP_DATE);
 
   /* Halbe Halbe */
