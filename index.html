@@ -565,7 +565,7 @@ h1{font-size:23px}
     var ys=years(),h=planHTML();
     var dueHH=hhDueFix();
     if(dueHH.length){
-      h+='<div class="card"><h2>Halbe Halbe</h2><div class="note" style="margin:0 0 10px;color:var(--ink)">Für '+ymLabel(CUR)+' sind noch nicht in Halbe Halbe eingetragen: '+dueHH.map(function(it){return esc(it.name);}).join(", ")+' ('+eur(dueHH.reduce(function(a,it){return a+fixM(it,CUR);},0))+'). Die Aufteilung gilt so, wie sie bei jedem Posten eingestellt ist.</div><button class="btn" data-act="postFixHH" style="width:100%">Jetzt in Halbe Halbe eintragen</button></div>';
+      h+='<div class="card"><h2>Halbe Halbe</h2><div class="note" style="margin:0 0 10px;color:var(--ink)">Für '+ymLabel(CUR)+' sind noch nicht in Halbe Halbe eingetragen: '+dueHH.map(function(it){return esc(it.name);}).join(", ")+' ('+eur(dueHH.reduce(function(a,it){return a+hhPayAmount(it,CUR);},0))+'). Die Aufteilung gilt so, wie sie bei jedem Posten eingestellt ist.</div><button class="btn" data-act="postFixHH" style="width:100%">Jetzt in Halbe Halbe eintragen</button></div>';
     }
     h+='<div class="card"><h2>Fixkosten</h2>';
     if(!state.fix.length)h+='<div class="empty">Noch keine Fixkosten. Trage zum Beispiel Miete, Strom, Versicherungen oder Abos ein.</div>';
@@ -578,7 +578,7 @@ h1{font-size:23px}
         return '<span class="hc">ab '+ymLabel(x.from)+': '+eur(x.amount)+(p?' ('+p+')':'')+(it.h.length>1?'<button data-act="delFixH" data-id="'+it.id+'" data-i="'+i+'" aria-label="Eintrag löschen">×</button>':'')+'</span>';
       }).join("")+'</div>';
       h+=hhSelectHTML(it);
-      if(it.hh){var posted=it.hhPosted&&it.hhPosted[CUR];h+='<div class="mute">Halbe Halbe'+(hhGroupName(it)?' ('+esc(hhGroupName(it))+')':'')+': '+esc(hhModeLabel(it))+', am '+hhDayOf(it)+'. des Monats. Für '+ymLabel(CUR)+(posted?' eingetragen.':' noch offen.')+'</div>';}
+      if(it.hh){var posted=it.hhPosted&&it.hhPosted[CUR];h+='<div class="mute">Halbe Halbe'+(hhGroupName(it)?' ('+esc(hhGroupName(it))+')':'')+': '+esc(hhModeLabel(it))+', am '+hhDayOf(it)+'. des Monats. '+(hhPayAmount(it,CUR)>0?'Für '+ymLabel(CUR)+(posted?' eingetragen.':' noch offen.'):(hhNextPay(it)?'Nächste Eintragung: '+ymLabel(hhNextPay(it))+', voller Betrag '+eur(hhPayAmount(it,hhNextPay(it)))+'.':''))+'</div>';}
       h+='<div class="acts"><button class="btn ghost small icon" data-act="editFix" data-id="'+it.id+'" aria-label="Bearbeiten"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><button class="btn ghost small" data-act="chgFix" data-id="'+it.id+'">Preis ändern</button><button class="btn danger small" data-act="delFix" data-id="'+it.id+'">Löschen</button></div></div>';
     });
     h+='<div class="row" style="margin-top:12px"><button class="btn" data-act="addFix">Fixkosten hinzufügen</button><button class="btn ghost" data-scan="fixauto">Beleg scannen</button></div>';
@@ -1083,7 +1083,7 @@ h1{font-size:23px}
   ["gesturestart","gesturechange","gestureend"].forEach(function(ev){document.addEventListener(ev,function(e){e.preventDefault();});});
 
   /* Version: bei jeder Änderung hier hochzählen */
-  var APP_VERSION="2.12.0",APP_DATE="2026-10-27";
+  var APP_VERSION="2.13.0",APP_DATE="2026-10-27";
   $("verInfo").textContent="Kassensturz Version "+APP_VERSION+" vom "+deDate(APP_DATE);
 
   /* Halbe Halbe */
@@ -1332,8 +1332,20 @@ h1{font-size:23px}
   function hhMode(it){return it.hh===true?"me_equal":(it.hh||"");}
   function hhDayOf(it){var d=parseInt(it.hhDay,10);return d>=1&&d<=28?d:1;}
   function hhModeLabel(it){var m=hhMode(it),l=splitLabels(otherName()).filter(function(x){return x[0]===m;})[0];return l?l[1]:"durch zwei";}
+  function monthsBetween(a,b){var pa=a.split("-"),pb=b.split("-");return (+pb[0]-+pa[0])*12+(+pb[1]-+pa[1]);}
+  function ymAdd(ym,k){var p=ym.split("-"),d=new Date(+p[0],+p[1]-1+k,1);return d.getFullYear()+"-"+pad(d.getMonth()+1);}
+  function hhPayAmount(it,ym){
+    var e=atH(it.h,ym);if(!e)return 0;
+    if(it.every===1)return e.amount;
+    var start=it.h.reduce(function(m,x){return x.from<m?x.from:m;},it.h[0].from),d=monthsBetween(start,ym);
+    return (d>=0&&d%it.every===0)?e.amount:0;
+  }
+  function hhNextPay(it){
+    for(var k=1;k<=12;k++){var ym=ymAdd(CUR,k);if(hhPayAmount(it,ym)>0)return ym;}
+    return "";
+  }
   function hhDueFix(){
-    return state.fix.filter(function(it){return it.hh&&fixM(it,CUR)>0&&!(it.hhPosted&&it.hhPosted[CUR]);});
+    return state.fix.filter(function(it){return it.hh&&hhPayAmount(it,CUR)>0&&!(it.hhPosted&&it.hhPosted[CUR]);});
   }
   var postBusy=false;
   async function postFixHH(){
@@ -1343,10 +1355,10 @@ h1{font-size:23px}
     try{
       await hhEnsure();
       var g=hhCur(),pn=$("hhPayer").selectedOptions[0].textContent;
-      var sum=due.reduce(function(a,it){return a+fixM(it,CUR);},0);
-      var lines=due.map(function(it){return it.name+" "+eur(fixM(it,CUR))+", am "+hhDayOf(it)+". ("+(hhGroupName(it)||g.name)+": "+hhModeLabel(it)+")";}).join("\n");
+      var sum=due.reduce(function(a,it){return a+hhPayAmount(it,CUR);},0);
+      var lines=due.map(function(it){return it.name+" "+eur(hhPayAmount(it,CUR))+(it.every>1?(it.every===12?" jährlich":" vierteljährlich"):"")+", am "+hhDayOf(it)+". ("+(hhGroupName(it)||g.name)+": "+hhModeLabel(it)+")";}).join("\n");
       if(!confirm("In Halbe Halbe eintragen für "+ymLabel(CUR)+", ich bin "+pn+":\n"+lines+"\nZusammen "+eur(sum)+". Fortfahren?")){postBusy=false;return;}
-      var recs=due.map(function(it){return {amount:Math.round(fixM(it,CUR)*100)/100,note:it.name,cat:"Fixkosten",date:CUR+"-"+pad(hhDayOf(it)),split:hhMode(it),group:it.hhGroup||""};});
+      var recs=due.map(function(it){return {amount:Math.round(hhPayAmount(it,CUR)*100)/100,note:it.name,cat:"Fixkosten",date:CUR+"-"+pad(hhDayOf(it)),split:hhMode(it),group:it.hhGroup||""};});
       await hhPushMany(recs);
       due.forEach(function(it){it.hhPosted=it.hhPosted||{};it.hhPosted[CUR]=true;});
       save();renderFin();
@@ -1369,7 +1381,7 @@ h1{font-size:23px}
       {k:"name",label:"Name",type:"text",val:it.name},
       {k:"amount",label:"Betrag pro Zahlung in Euro",type:"number",val:en.amount},
       {k:"every",label:"Zahlungsrhythmus",type:"select",opts:EVERY,val:it.every},
-      {k:"from",label:"Dieser Betrag gilt ab",type:"month",val:en.from},
+      {k:"from",label:"Dieser Betrag gilt ab (bei jährlicher oder vierteljährlicher Zahlung der Zahlmonat)",type:"month",val:en.from},
       {k:"alias",label:"Stichworte für Kontoauszüge (mit Komma trennen)",type:"text",val:(it.aliases||[]).join(", "),ph:"z. B. WEG, ING, IB SH"},
       {k:"hh",label:"Halbe Halbe",type:"select",opts:[["","Nicht teilen"]].concat(splitLabels(otherName()).map(function(x){return [x[0],"Jeden Monat: "+x[1]];})),val:hhMode(it)},
       {k:"hhDay",label:"Buchungstag in Halbe Halbe (1 bis 28)",type:"number",val:hhDayOf(it)},
