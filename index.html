@@ -154,6 +154,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-an
 .row>*{min-width:0}
 html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 input,select,textarea{font-size:16px}
+.btn.icon{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px}
 </style>
 </head>
 <body>
@@ -522,7 +523,7 @@ input,select,textarea{font-size:16px}
         var p=i>0?pct(x.amount,it.h[i-1].amount):"";
         return '<span class="hc">ab '+ymLabel(x.from)+': '+eur(x.amount)+(p?' ('+p+')':'')+(it.h.length>1?'<button data-act="delFixH" data-id="'+it.id+'" data-i="'+i+'" aria-label="Eintrag löschen">×</button>':'')+'</span>';
       }).join("")+'</div>';
-      h+='<div class="acts"><button class="btn ghost small" data-act="chgFix" data-id="'+it.id+'">Preis ändern</button><button class="btn danger small" data-act="delFix" data-id="'+it.id+'">Löschen</button></div></div>';
+      h+='<div class="acts"><button class="btn ghost small icon" data-act="editFix" data-id="'+it.id+'" aria-label="Bearbeiten"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><button class="btn ghost small" data-act="chgFix" data-id="'+it.id+'">Preis ändern</button><button class="btn danger small" data-act="delFix" data-id="'+it.id+'">Löschen</button></div></div>';
     });
     h+='<div class="row" style="margin-top:12px"><button class="btn" data-act="addFix">Fixkosten hinzufügen</button><button class="btn ghost" data-scan="fixauto">Beleg scannen</button></div>';
     h+='<div class="note">Tipp: Mit einem früheren Monat bei „Gültig ab“ kannst du auch alte Preise eintragen, damit die Entwicklung über die Jahre sichtbar wird.</div></div>';
@@ -982,7 +983,7 @@ input,select,textarea{font-size:16px}
   ["gesturestart","gesturechange","gestureend"].forEach(function(ev){document.addEventListener(ev,function(e){e.preventDefault();});});
 
   /* Version: bei jeder Änderung hier hochzählen */
-  var APP_VERSION="2.2.0",APP_DATE="2026-10-27";
+  var APP_VERSION="2.3.0",APP_DATE="2026-10-27";
   $("verInfo").textContent="Kassensturz Version "+APP_VERSION+" vom "+deDate(APP_DATE);
 
   /* Halbe Halbe */
@@ -1100,6 +1101,25 @@ input,select,textarea{font-size:16px}
     var r=await hhPushMany([rec]);
     return {group:r.group,mine:r.mines[0]};
   }
+
+  /* Fixkosten bearbeiten */
+  $("p_budget").addEventListener("click",function(e){
+    var t=e.target.closest('[data-act="editFix"]');if(!t)return;
+    var it=byId(state.fix,t.getAttribute("data-id"));if(!it)return;
+    var en=atH(it.h,CUR)||it.h.slice().sort(function(a,b){return a.from<b.from?-1:1;})[0];
+    openForm("Bearbeiten: "+it.name,[
+      {k:"name",label:"Name",type:"text",val:it.name},
+      {k:"amount",label:"Betrag pro Zahlung in Euro",type:"number",val:en.amount},
+      {k:"every",label:"Zahlungsrhythmus",type:"select",opts:EVERY,val:it.every},
+      {k:"from",label:"Dieser Betrag gilt ab",type:"month",val:en.from}
+    ],function(v){
+      var n=num(v.amount);if(!v.name.trim()||n===null||!v.from)return bad();
+      it.name=v.name.trim();it.every=+v.every;
+      it.h=it.h.filter(function(x){return x!==en&&x.from!==v.from;});
+      it.h.push({from:v.from,amount:n});
+      it.h.sort(function(a,b){return a.from<b.from?-1:1;});
+    });
+  });
 
   /* Beitrag von Julia */
   $("p_budget").addEventListener("click",function(e){
