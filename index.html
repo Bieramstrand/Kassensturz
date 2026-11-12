@@ -1278,10 +1278,10 @@ h1{font-size:23px}
       var total=Math.round(rec.amount*100),sp={},payer=mode.indexOf("other")===0?c.other:c.me;
       if(rec.type==="in"){
         // Geteilte Einnahme: das Geld kam bei mir an, die Hälfte gehört der anderen Person.
-        // In Halbe Halbe als Betrag eingetragen, den ich ihr schulde.
+        // Halbe Halbe speichert Einnahmen als Ausgabe mit negativem Betrag.
         var share=Math.floor(total/2),eidIn="e"+Math.random().toString(36).slice(2,10)+(base+n).toString(36).slice(-3);
-        sp[c.me]=share;
-        (by[c.gr.id]=by[c.gr.id]||[]).push({id:eidIn,type:"expense",desc:"Einnahme geteilt: "+(rec.note||rec.cat),amount:share,payer:c.other,splits:sp,mode:"equal",raw:{},date:rec.date,ts:base+n,mts:base+n});
+        sp[c.me]=-(total-share);sp[c.other]=-share;
+        (by[c.gr.id]=by[c.gr.id]||[]).push({id:eidIn,type:"expense",desc:rec.note||rec.cat,amount:-total,payer:c.me,splits:sp,mode:"equal",raw:{},date:rec.date,ts:base+n,mts:base+n});
         mines.push((total-share)/100);pos.push("");names.push(c.gr.name);
         return;
       }
