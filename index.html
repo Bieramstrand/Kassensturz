@@ -430,7 +430,7 @@ h1{font-size:23px}
 
     var mt=state.tx.filter(inView);
     var spent=mt.filter(function(t){return t.type==="out";}).reduce(function(s,t){return s+bud(t);},0);
-    var income=mt.filter(function(t){return t.type==="in";}).reduce(function(s,t){return s+t.amount;},0);
+    var income=mt.filter(function(t){return t.type==="in";}).reduce(function(s,t){return s+(t.mine!=null?t.mine:t.amount);},0);
     $("spent").textContent=eur(spent);
     var byM={},curK=pKey(periodOf(iso(now)));
     state.tx.forEach(function(t){if(t.type!=="out")return;var k=pKey(periodOf(t.date));byM[k]=(byM[k]||0)+bud(t);});
@@ -1005,7 +1005,7 @@ h1{font-size:23px}
       '<div style="max-height:46vh;overflow:auto;margin-top:8px">'+rows.map(function(r,i){
         return '<div class="tl"><div class="tl1"><input type="checkbox" id="tk'+i+'"'+(r.dup?"":" checked")+'><input type="text" id="tn'+i+'" value="'+esc(r.name)+'"><input type="number" inputmode="decimal" step="0.01" id="ta'+i+'" value="'+r.amount+'"></div>'+
           '<div class="tl2"><input type="date" id="td'+i+'" value="'+r.date+'"><select id="tt'+i+'"><option value="out"'+(r.type==="out"?" selected":"")+'>Ausgabe</option><option value="in"'+(r.type==="in"?" selected":"")+'>Einnahme</option></select></div>'+
-          '<div class="tl3"><select id="tc'+i+'">'+catOptions(r.type,r.cat)+'</select><label class="ck'+(r.type==="in"?" hide":"")+'" id="thw'+i+'"><input type="checkbox" id="th'+i+'"> Halbe Halbe</label></div>'+
+          '<div class="tl3"><select id="tc'+i+'">'+catOptions(r.type,r.cat)+'</select><label class="ck" id="thw'+i+'"><input type="checkbox" id="th'+i+'"> Halbe Halbe</label></div>'+
           (mode==="stmt"?'<div class="tl4'+(r.type==="in"?" hide":"")+'" id="tfw'+i+'"><select id="tf'+i+'">'+fixOptions(r.fixId)+'</select></div>':'')+
           (r.fixId?'<div class="mute" style="color:var(--accent2)">Erkannt als Fixkosten: '+esc(r.fixName)+'</div>':'')+
           (r.dup?'<div class="mute" style="color:var(--accent2)">'+r.dupWhy+'</div>':'')+'</div>';
@@ -1040,7 +1040,6 @@ h1{font-size:23px}
       if(/^tt\d+$/.test(id)){
         var i=id.slice(2);
         $("tc"+i).innerHTML=catOptions(t.value,"");
-        $("thw"+i).classList.toggle("hide",t.value==="in");
         var fw=$("tfw"+i);if(fw)fw.classList.toggle("hide",t.value==="in");
       }else if(/^th\d+$/.test(id)&&t.checked){ensureHH();}
     };
@@ -1052,7 +1051,7 @@ h1{font-size:23px}
         if(!$("tk"+i).checked)return;
         var a=num($("ta"+i).value),nm=$("tn"+i).value.trim(),ty=$("tt"+i).value;
         if(a===null||a<=0||!nm)return;
-        picked.push({shopName:(mode==="bonlist"?String(d.merchant||"").trim():""),fixSel:(mode==="stmt"&&ty==="out"&&$("tf"+i))?$("tf"+i).value:"",half:ty==="out"&&$("th"+i).checked,rec:{id:Date.now()+""+i+Math.floor(Math.random()*999),type:ty,amount:Math.round(a*100)/100,cat:$("tc"+i).value,note:nm,date:$("td"+i).value||iso(now)}});
+        picked.push({shopName:(mode==="bonlist"?String(d.merchant||"").trim():""),fixSel:(mode==="stmt"&&ty==="out"&&$("tf"+i))?$("tf"+i).value:"",half:$("th"+i).checked,rec:{id:Date.now()+""+i+Math.floor(Math.random()*999),type:ty,amount:Math.round(a*100)/100,cat:$("tc"+i).value,note:nm,date:$("td"+i).value||iso(now)}});
       });
       if(!picked.length){alert("Es ist nichts ausgewählt.");return;}
       busy=true;$("fSave").textContent="Speichere …";
@@ -1277,6 +1276,15 @@ h1{font-size:23px}
       var c=cx(rec.group||g0.id);
       var mode=rec.split||$("hhSplit").value||"me_equal";
       var total=Math.round(rec.amount*100),sp={},payer=mode.indexOf("other")===0?c.other:c.me;
+      if(rec.type==="in"){
+        // Geteilte Einnahme: das Geld kam bei mir an, die Hälfte gehört der anderen Person.
+        // In Halbe Halbe als Betrag eingetragen, den ich ihr schulde.
+        var share=Math.floor(total/2),eidIn="e"+Math.random().toString(36).slice(2,10)+(base+n).toString(36).slice(-3);
+        sp[c.me]=share;
+        (by[c.gr.id]=by[c.gr.id]||[]).push({id:eidIn,type:"expense",desc:"Einnahme geteilt: "+(rec.note||rec.cat),amount:share,payer:c.other,splits:sp,mode:"equal",raw:{},date:rec.date,ts:base+n,mts:base+n});
+        mines.push((total-share)/100);pos.push("");names.push(c.gr.name);
+        return;
+      }
       if(mode==="me_equal"||mode==="other_equal"){
         var half=Math.floor(total/2);
         c.ids.forEach(function(k){sp[k]=half;});
