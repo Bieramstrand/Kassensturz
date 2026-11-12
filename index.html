@@ -907,14 +907,17 @@ h1{font-size:23px}
   function catList(type){return type==="in"?["Gehalt","Sonstiges"]:CATS.filter(function(c){return c!=="Gehalt";});}
   function catOptions(type,sel){return catList(type).map(function(c){return '<option'+(c===sel?" selected":"")+'>'+c+'</option>';}).join("");}
   function matchFix(name,amount){
+    // Name oder Stichwort allein reicht nicht (z. B. "Amazon" bei jedem Einkauf).
+    // Ein Treffer braucht immer einen passenden Betrag.
     var low=String(name).toLowerCase(),best=null;
     state.fix.forEach(function(it){
-      var sc=0;
-      (it.aliases||[]).forEach(function(a){if(a&&low.indexOf(a)>-1)sc=3;});
-      var cur=atH(it.h,CUR);
-      if(!sc&&cur&&Math.abs(cur.amount-amount)<0.005)sc=2;
-      if(!sc){String(it.name).toLowerCase().split(/[^a-zäöüß0-9]+/).forEach(function(w){if(w.length>=4&&low.indexOf(w)>-1)sc=1;});}
-      if(sc&&(!best||sc>best.s))best={id:it.id,name:it.name,s:sc};
+      var cur=atH(it.h,CUR);if(!cur||!(cur.amount>0))return;
+      var diff=Math.abs(cur.amount-amount),exact=diff<0.005,near=diff<=Math.max(1,cur.amount*0.1);
+      if(!near)return;
+      var txt=(it.aliases||[]).some(function(a){return a&&low.indexOf(a)>-1;});
+      if(!txt){String(it.name).toLowerCase().split(/[^a-zäöüß0-9]+/).forEach(function(w){if(w.length>=4&&low.indexOf(w)>-1)txt=true;});}
+      var sc=txt?(exact?4:3):(exact&&cur.amount>=50?1:0);
+      if(sc&&(!best||sc>best.s||(sc===best.s&&diff<best.d)))best={id:it.id,name:it.name,s:sc,d:diff};
     });
     return best;
   }
@@ -986,8 +989,12 @@ h1{font-size:23px}
     });
     rows.forEach(function(r){
       r.fixId="";r.fixName="";
-      if(mode==="stmt"&&r.type==="out"){var m=matchFix(r.name,r.amount);if(m){r.fixId=m.id;r.fixName=m.name;}}
+      if(mode==="stmt"&&r.type==="out"){var m=matchFix(r.name,r.amount);if(m){r.fixId=m.id;r.fixName=m.name;r.fixS=m.s;r.fixD=m.d;}}
     });
+    // Jeder Fixkostenposten nur bei der am besten passenden Buchung vorschlagen
+    var bestFor={};
+    rows.forEach(function(r,i){if(!r.fixId)return;var b=bestFor[r.fixId];if(b==null||r.fixS>rows[b].fixS||(r.fixS===rows[b].fixS&&r.fixD<rows[b].fixD))bestFor[r.fixId]=i;});
+    rows.forEach(function(r,i){if(r.fixId&&bestFor[r.fixId]!==i){r.fixId="";r.fixName="";}});
     var ndup=rows.filter(function(r){return r.dup;}).length;
     var sum=rows.reduce(function(s,r){return s+(r.type==="out"?r.amount:0);},0),tot=okNum(d.total);
     $("fTitle").textContent=single?"Gesamtsumme erkannt":rows.length+" Positionen erkannt";
