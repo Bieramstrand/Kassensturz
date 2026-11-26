@@ -323,7 +323,7 @@ h1{font-size:23px}
   var now=new Date();
   var state=load();
   var openWk={};
-  function bud(t){return t.fix?0:(t.mine!=null?t.mine:t.amount);}
+  function bud(t){return (t.fix||t.po)?0:t.amount;}
   function cyc(){var c=parseInt(state.cycle,10);return c>=1&&c<=28?c:25;}
   function periodOf(ds){var d=parse(ds),y=d.getFullYear(),m=d.getMonth();if(d.getDate()<cyc()){m--;if(m<0){m=11;y--;}}return {y:y,m:m};}
   function pKey(p){return p.y+"-"+pad(p.m+1);}
@@ -464,7 +464,7 @@ h1{font-size:23px}
     }
 
     var cats={};
-    mt.filter(function(t){return t.type==="out"&&!t.fix;}).forEach(function(t){cats[t.cat]=(cats[t.cat]||0)+(t.mine!=null?t.mine:t.amount);});
+    mt.filter(function(t){return t.type==="out"&&!t.fix;}).forEach(function(t){cats[t.cat]=(cats[t.cat]||0)+bud(t);});
     var keys=Object.keys(cats).sort(function(a,b){return cats[b]-cats[a];});
     $("cats").innerHTML=keys.length?keys.map(function(k){return '<div class="cat"><span>'+esc(k)+'</span><b>'+eur(cats[k])+'</b></div>';}).join(""):'<div class="empty">Noch keine Ausgaben in diesem Monat.</div>';
 
@@ -478,7 +478,7 @@ h1{font-size:23px}
     function dm(d){return pad(d.getDate())+"."+pad(d.getMonth()+1)+".";}
     function isoWeek(d){var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())),day=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-day);var y0=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y0)/864e5+1)/7);}
     function txRow(t){
-      return '<div class="tx"><div class="m"><b>'+esc(t.note||t.cat)+'</b><small>'+deDate(t.date)+' · '+esc(t.cat)+(t.shop?' · '+esc(t.shop):'')+(t.hh?' · geteilt, dein Anteil '+eur(t.mine):'')+(t.po?' · '+esc(t.po)+' hat bezahlt':'')+(t.fix?' · Fixkosten: '+esc(t.fix):'')+'</small></div>'+
+      return '<div class="tx"><div class="m"><b>'+esc(t.note||t.cat)+'</b><small>'+deDate(t.date)+' · '+esc(t.cat)+(t.shop?' · '+esc(t.shop):'')+(t.hh?' · geteilt, Halbe Halbe Anteil '+eur(t.mine):'')+(t.po?' · '+esc(t.po)+' hat bezahlt':'')+(t.fix?' · Fixkosten: '+esc(t.fix):'')+'</small></div>'+
         '<div class="a '+(t.type==="in"?"in":"")+'">'+(t.type==="in"?"+":"minus ")+eur(t.amount).replace("minus ","")+'</div>'+
         '<button class="x" data-edit="'+t.id+'" aria-label="Bearbeiten"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><button class="x" data-del="'+t.id+'" aria-label="Löschen">×</button></div>';
     }
@@ -1145,7 +1145,7 @@ h1{font-size:23px}
   ["gesturestart","gesturechange","gestureend"].forEach(function(ev){document.addEventListener(ev,function(e){e.preventDefault();});});
 
   /* Version: bei jeder Änderung hier hochzählen */
-  var APP_VERSION="2.16.0",APP_DATE="2026-11-12";
+  var APP_VERSION="2.17.0",APP_DATE="2026-11-26";
   $("verInfo").textContent="Kassensturz Version "+APP_VERSION+" vom "+deDate(APP_DATE);
 
   /* Halbe Halbe */
